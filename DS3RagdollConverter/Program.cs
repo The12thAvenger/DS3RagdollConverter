@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace DS3RagdollConverter
@@ -25,7 +27,8 @@ namespace DS3RagdollConverter
                 BuildObjDict(hknpDataSection, "hknp");
                 BuildObjDict(hkaDataSection2014, "hka");
 
-                RenameObjects(hkaDataSection2014, "hka");
+
+                RenameObjects(hkaDataSection2014.Element("hkobject"), "hka");
                 XElement hknpPhysicsSceneData = hknpDataSection.Elements().First(hkobj => hkobj.Attribute("class").Value == "hknpPhysicsSceneData");
                 RenameObjects(hknpPhysicsSceneData, "hknp");
                 IEnumerable<XElement> hkaSkeletonMapperVariants = hkaDataSection2014.Element("hkobject").Element("hkparam").Elements().ToList()[2].ElementsAfterSelf();
@@ -33,11 +36,19 @@ namespace DS3RagdollConverter
                 {
                     RenameObjects(xelem, "hka");
                 }
+
                 BuildOutputPackfile(hknpDataSection, hkaDataSection2014);
 
                 File.Delete(args[0] + ".bak");
                 File.Move(args[0], args[0] + ".bak");
-                OutputRoot.Save(args[0]);
+
+                XmlWriterSettings settings = new XmlWriterSettings();
+                settings.Encoding = new ASCIIEncoding();
+                settings.Indent = true;
+                using (var writer = XmlWriter.Create(args[0], settings))
+                {
+                    OutputRoot.Save(writer);
+                }
             }
             
         }
@@ -46,9 +57,11 @@ namespace DS3RagdollConverter
 
         public static XElement OutputRoot { get; set; }
 
-        public static Dictionary<string, XElement> HkaObjDict { get; set; }
+        public static Dictionary<string, XElement> HkaObjDict { get; set; } = new();
 
-        public static Dictionary<string, XElement> HknpObjDict { get; set; }
+        public static Dictionary<string, XElement> HknpObjDict { get; set; } = new();
+
+        public static Dictionary<string, XElement> RenamedObjDict { get; set; } = new();
 
         private static int CurrentName { get; set; } = 90;
 
@@ -89,6 +102,7 @@ namespace DS3RagdollConverter
             }
         }
 
+        // stores each object under its original name Id 
         static void BuildObjDict(XElement __data__, string dictType)
         {
             foreach (XElement hkojbect in __data__.Elements())
@@ -110,9 +124,11 @@ namespace DS3RagdollConverter
             OutputRoot = new XElement("hkpackfile",
                          new XAttribute("classversion", "11"),
                          new XAttribute("contentsversion", "hk_2014.1.0-r1"));
-            OutputRoot.Add(hkaData);
             hkaData.Add(hknpData.Elements());
-            hkaData.Elements().OrderBy(e => int.Parse(e.Attribute("Name").Value.Substring(1)));
+            XElement[] ObjArray = hkaData.Elements().OrderBy(e => int.Parse(e.Attribute("name").Value[1..])).ToArray();
+            hkaData.ReplaceAll(ObjArray);
+            hkaData.Add(new XAttribute("name", "__data__"));
+            OutputRoot.Add(hkaData);
         }
 
         // separates physics data and converts it to hknp format using hkp2hknp
@@ -125,7 +141,8 @@ namespace DS3RagdollConverter
                                           .FirstOrDefault(hkobj => hkobj.Attribute("name").Value == InputRoot.Attribute("toplevelobject").Value);
 
             // removes references to all hka elements from hkRootLevelContainer
-            List<XElement> namedVariants = hkRootLevelElement.Element("hkparam").Elements().ToList();
+            hkRootLevelElement.Element("hkparam").Attribute("numelements").Value = "1";
+            List <XElement> namedVariants = hkRootLevelElement.Element("hkparam").Elements().ToList();
             for (int i = 0;  i < namedVariants.Count; i++)
             {
                 string className = namedVariants[i].Elements()
@@ -138,6 +155,7 @@ namespace DS3RagdollConverter
                 }
             }
 
+
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
 
             if (!Directory.Exists(baseDirectory + "temp"))
@@ -145,13 +163,68 @@ namespace DS3RagdollConverter
                 Directory.CreateDirectory(baseDirectory + "temp");
             }
 
-            string[] args = { baseDirectory + "temp/hkpPhysics.xml", baseDirectory + "temp/hknpPhysics.xml" };
-            Process.Start("Dependencies/hkp2hknp.exe", args);
+            XmlWriterSettings settings = new XmlWriterSettings();
+            settings.Encoding = new ASCIIEncoding();
+            settings.Indent = true;
+            using (var writer = XmlWriter.Create(baseDirectory + "temp/hkpPhysics.xml", settings))
+            {
+                hkpackfileHkpPhysics.Save(writer);
+            }
+
+            Process hkp2hknp = new Process();
+            hkp2hknp.StartInfo.FileName = baseDirectory + "Dependencies/hkp2hknp.exe";
+            string args = baseDirectory + "temp/hkpPhysics.xml " + baseDirectory + "temp/hknpPhysics.xml";
+            hkp2hknp.StartInfo.Arguments = args;
+            hkp2hknp.Start();
+            hkp2hknp.WaitForExit();
+
             XElement hkpackfileHknpPhysics = XElement.Load("temp/hknpPhysics.xml");
 
-            Directory.Delete(baseDirectory + "temp");
+            Directory.Delete(baseDirectory + "temp", true);
 
             XElement hknpPhysicsData = hkpackfileHknpPhysics.Element("hksection");
+
+            hknpPhysicsData.Elements().First(hkobj => hkobj.Attribute("class").Value == "hkRootLevelContainer").Remove();
+
+            hknpPhysicsData.Elements().First(hkobj => hkobj.Attribute("class").Value == "hknpPhysicsSceneData").Attribute("signature").Value = "0x701ce72c";
+
+            ConvertRagdollData(hknpPhysicsData);
+
+            foreach (XElement hknpCapsuleShape in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hknpCapsuleShape"))
+            {
+                hknpCapsuleShape.Attribute("signature").Value = "0x60a75f4c";
+                hknpCapsuleShape.Elements().First(hkparam => hkparam.Attribute("name").Value == "flags").Value = "451";
+                hknpCapsuleShape.Elements().First(hkparam => hkparam.Attribute("name").Value == "dispatchType").Value = "1";
+            }
+
+            foreach (XElement hknpShapeMassProperties in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hknpShapeMassProperties"))
+            {
+                hknpShapeMassProperties.Attribute("signature").Value = "0xe9191728";
+                XElement hkCompressedMassProperties = hknpShapeMassProperties.Element("hkparam").Element("hkobject");
+                hkCompressedMassProperties.Add(new XAttribute("class", "hkCompressedMassProperties"), new XAttribute("name", "compressedMassProperties"), new XAttribute("signature", "0x9ac5cee1"));
+
+                List<XElement> multiParams = new();
+                foreach (XElement hkparam in hkCompressedMassProperties.Elements().Where(hkparam => hkparam.Value.Split().Length > 1))
+                {
+                    multiParams.Add(hkparam);
+                    string[] paramArray = hkparam.Value.Split();
+                    for (int i = 0; i < paramArray.Length; i++)
+                    {
+                        string value = paramArray[i];
+                        string name = hkparam.Attribute("name").Value + (i + 1).ToString();
+                        hkCompressedMassProperties.Add(new XElement("hkparam", new XAttribute("name", name), value));
+                    }
+                }
+                foreach (XElement hkparam in multiParams)
+                {
+                    hkparam.Remove();
+                }
+            }
+
+            foreach (XElement hkpLimitedHingeConstraintData in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hkpLimitedHingeConstraintData"))
+            {
+                hkpLimitedHingeConstraintData.Attribute("signature").Value = "0x51ea603a";
+            }
 
             return hknpPhysicsData;
         }
@@ -162,13 +235,18 @@ namespace DS3RagdollConverter
             XElement inputDataSection = InputRoot.Elements("hksection").FirstOrDefault(hksection => hksection.Attribute("name").Value == "__data__");
             XElement outputDataSection = new XElement("hksection", new XAttribute("name", "__data__"));
 
-            // creates a copy of the hkRootLevelContainer from the input file, adjusts the ragdoll instance variant to match the ragdoll data variant found in the 2014 version and adds it to the output __data__ hksection
+            // creates a copy of the hkRootLevelContainer from the input file, adjusts the variants to match the variants found in the 2014 version and adds it to the output __data__ hksection
             XElement inputHkRootLevelContainer = inputDataSection.Elements().FirstOrDefault(hkobj => hkobj.Attribute("name").Value == InputRoot.Attribute("toplevelobject").Value);
             XElement outputHkRootLevelContainer = new XElement(inputHkRootLevelContainer);
             XElement ragdollIns = outputHkRootLevelContainer.Element("hkparam").Elements()
                                   .FirstOrDefault(hkobj => hkobj.Value.Contains("hkaRagdollInstance"));
             ragdollIns.Elements().FirstOrDefault(hkparam => hkparam.Value == "hkaRagdollInstance").Value = "hknpRagdollData";
             ragdollIns.Elements().FirstOrDefault(hkparam => hkparam.Value == "RagdollInstance").Value = "Physics Ragdoll";
+
+            XElement physicsData = outputHkRootLevelContainer.Element("hkparam").Elements()
+                                  .FirstOrDefault(hkobj => hkobj.Value.Contains("hkpPhysicsData"));
+            physicsData.Elements().FirstOrDefault(hkparam => hkparam.Value == "hkpPhysicsData").Value = "hknpPhysicsSceneData";
+            physicsData.Elements().FirstOrDefault(hkparam => hkparam.Value == "Physics Data").Value = "Physics Scene Data";
             outputDataSection.Add(outputHkRootLevelContainer);
 
             // converts the hkaAnimationContainer including its hkaSkeleton children to the 2014 format and adds them to the output __data__ hksection
@@ -179,7 +257,7 @@ namespace DS3RagdollConverter
             foreach (XElement hkaSkeleton in inputDataSection.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hkaSkeleton"))
             {
                 hkaSkeleton.Attribute("signature").Value = "0xfec1cedb";
-
+                hkaSkeleton.Add(new XElement("hkparam", new XAttribute("name", "partitions"), new XAttribute("numelements", "0")));
                 outputDataSection.Add(hkaSkeleton);
             }
 
@@ -201,6 +279,7 @@ namespace DS3RagdollConverter
                 skeletonB.AddAfterSelf(new XElement("hkparam",
                                        new XAttribute("name", "partitionMap"),
                                        new XAttribute("numelements", 0)));
+                outputDataSection.Add(hkaSkeletonMapper);
             }
 
             return outputDataSection;
@@ -208,68 +287,168 @@ namespace DS3RagdollConverter
 
         static void RenameObjects(XElement xelem, string dataType)
         {
-            if (xelem.Parent.Name == "hksection")
+            if (xelem.Parent != null && xelem.Parent.Name == "hksection")
             {
                 xelem.Attribute("name").Value = $"#{CurrentName}";
+                RenamedObjDict[$"#{CurrentName}"] = xelem;
                 CurrentName++;
             }
             
             foreach (XElement childXelem in xelem.Elements())
             {
-                // remove potential leading whitespace so we can check whether the value is a reference
-                string noWhitespaceValue = string.Join("", childXelem.Value.Split(default(string[]), StringSplitOptions.RemoveEmptyEntries));
-
                 // end recursion when reaching the physics data
-                if (noWhitespaceValue == "Physics Data")
+                if (dataType == "hka" && childXelem.Element("hkparam") != null && childXelem.Element("hkparam").Value == "Physics Scene Data")
                 {
                     dataType = "hknp";
-                    xelem.Elements().First(hkparam => hkparam.Attribute("name").Value == "variant").Value = $"#{CurrentName}";
-                    xelem.ElementsAfterSelf().First().Elements().First(hkparam => hkparam.Attribute("name").Value == "variant").Value = $"#{CurrentName+1}";
+                    childXelem.Elements().First(hkparam => hkparam.Attribute("name").Value == "variant").Value = $"#{CurrentName}";
+                    childXelem.ElementsAfterSelf().First().Elements().First(hkparam => hkparam.Attribute("name").Value == "variant").Value = $"#{CurrentName + 1}";
+                    return;
                 }
-                else if (noWhitespaceValue.StartsWith("#"))
+                else if (!childXelem.HasElements)
                 {
-                    //split value in case it is a list of references
-                    string[] refList = xelem.Value.Split(default(string[]), StringSplitOptions.RemoveEmptyEntries);
+                    // remove potential leading whitespace so we can check whether the value is a reference
+                    string noWhitespaceValue = string.Join("", childXelem.Value.Split(default(string[]), StringSplitOptions.RemoveEmptyEntries));
 
-                    string newRef = "";
-                    if (refList.Length > 1)
+                    if (noWhitespaceValue.StartsWith("#"))
                     {
-                        newRef = "\n";
-                    }
-                    
-                    foreach (string refName in refList)
-                    {
-                        Dictionary<string, XElement> ObjDict = HkaObjDict;
-                        if (dataType == "hknp")
+                        //split value in case it is a list of references
+                        string[] refList = childXelem.Value.Split(default(string[]), StringSplitOptions.RemoveEmptyEntries);
+
+                        string newRef = "";
+                        if (refList.Length > 1)
                         {
-                            ObjDict = HknpObjDict;
+                            newRef = "\n";
                         }
 
-                        // check whether object has already been renamed
-                        if (ObjDict[refName].Attribute("name").Value == refName)
+                        foreach (string refName in refList)
                         {
-                            if (refList.Length > 1)
+                            // set ObjDict based on dataType
+                            Dictionary<string, XElement> ObjDict = HkaObjDict;
+                            if (dataType == "hknp")
                             {
-                                newRef += $"#{CurrentName}\n";
+                                ObjDict = HknpObjDict;
+                            }
+
+                            // debug
+                            //if (!ObjDict.ContainsKey(refName))
+                            //{
+                            //    if (RenamedObjDict.ContainsKey(refName))
+                            //    {
+                            //        continue;
+                            //    }
+                            //    Console.WriteLine(dataType);
+                            //    Console.WriteLine(childXelem.Attribute("name").Value);
+                            //    foreach (string r in refList)
+                            //    {
+                            //        Console.WriteLine(r);
+                            //    }
+                            //}
+
+                            // check whether object has already been renamed
+                            if (ObjDict.ContainsKey(refName) && ObjDict[refName].Attribute("name").Value == refName)
+                            {
+                                if (refList.Length > 1)
+                                {
+                                    newRef += $"#{CurrentName}\n";
+                                }
+                                else
+                                {
+                                    newRef = $"#{CurrentName}";
+                                }
+                                RenameObjects(ObjDict[refName], dataType);
+                            }
+                            else if (ObjDict.ContainsKey(refName) && ObjDict[refName].Attribute("name").Value != refName)
+                            {
+                                if (refList.Length > 1)
+                                {
+                                    newRef += ObjDict[refName].Attribute("name").Value + "\n";
+                                }
+                                else
+                                {
+                                    newRef = ObjDict[refName].Attribute("name").Value;
+                                }
+                            }
+                            else if (RenamedObjDict.ContainsKey(refName))
+                            {
+                                if (refList.Length > 1)
+                                {
+                                    newRef += refName;
+                                }
+                                else
+                                {
+                                    newRef = refName;
+                                }
                             }
                             else
                             {
-                                newRef = $"#{CurrentName}";
+                                Console.WriteLine($"referenced object {refName} cannot be found");
                             }
-                            RenameObjects(ObjDict[refName], dataType);
                         }
-                        else
-                        {
-                            newRef += ObjDict[refName].Attribute("name").Value;
-                        }
+                        childXelem.Value = newRef;
                     }
-                    childXelem.Value = newRef;
                 }
                 else
                 {
                     RenameObjects(childXelem, dataType);
                 }
             }
+        }
+        // converts hknpPhysicsSystemData to hknpRagdollData
+        public static void ConvertRagdollData(XElement hknpPhysicsData)
+        {
+            XElement hknpRagdollData = hknpPhysicsData.Elements().First(hkobj => hkobj.Attribute("class").Value == "hknpPhysicsSystemData");
+
+            hknpRagdollData.Attribute("signature").Value = "0x7b054ea9";
+            hknpRagdollData.Attribute("class").Value = "hknpRagdollData";
+
+            // materials
+            foreach (XElement material in hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "materials").Elements())
+            {
+                material.Elements().First(hkparam => hkparam.Attribute("name").Value == "name").Value = "";
+
+                XElement triggerType = material.Elements().First(hkparam => hkparam.Attribute("name").Value == "triggerVolumeType");
+                triggerType.Attribute("name").Value = "triggerType";
+                string triggerTypeVal = triggerType.Value.Replace("VOLUME", "TYPE");
+                triggerType.Value = triggerTypeVal;
+
+                XElement triggerManifoldTolerance = material.Elements().First(hkparam => hkparam.Attribute("name").Value == "triggerVolumeTolerance");
+                triggerManifoldTolerance.Attribute("name").Value = "triggerManifoldTolerance";
+                triggerManifoldTolerance.Element("hkobject").Add(new XAttribute("class", "hkUFloat8"), new XAttribute("name", "triggerManifoldTolerance"));
+
+                material.Add(new XElement("hkparam", new XAttribute("name", "userData"), 0));
+            }
+
+            // motionProperties
+            foreach (XElement motionProperty in hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "motionProperties").Elements())
+            {
+                if (!motionProperty.Elements().Where(hkparam => hkparam.Attribute("name").Value == "timeFactor").Any())
+                {
+                    motionProperty.Add(new XElement("hkparam", new XAttribute("name", "timeFactor"), "1.0"));
+                }
+            }
+
+            // bodyCinfos
+            foreach (XElement bodyCinfo in hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "bodyCinfos").Elements())
+            {
+                bodyCinfo.Add(new XElement("hkparam", new XAttribute("name", "userData"), 0));
+            }
+
+            // constraintCinfos
+            foreach (XElement constraintCinfo in hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "constraintCinfos").Elements())
+            {
+                constraintCinfo.Add(new XElement("hkparam", new XAttribute("name", "flags"), 0));
+            }
+
+            hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "name").Value = "Default Physics System Data";
+            hknpRagdollData.Add(new XElement("hkparam", new XAttribute("name", "skeleton"), "#93"));
+
+            string boneToBodyMap = "";
+            int numBones = int.Parse(hknpRagdollData.Element("hkparam").Attribute("numelements").Value);
+            for (int i = 0; i < numBones; i++)
+            {
+                boneToBodyMap += i + " ";
+            }
+            hknpRagdollData.Add(new XElement("hkparam", new XAttribute("name", "boneToBodyMap"), new XAttribute("numelements", numBones.ToString()), boneToBodyMap));
         }
     }
 }
