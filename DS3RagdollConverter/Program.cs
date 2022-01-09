@@ -286,7 +286,7 @@ namespace DS3RagdollConverter
                 string[] motorRefArray = motors.Value.Split();
                 for (int i = 0; i < motorRefArray.Length; i++)
                 {
-                    ragdollMotors.Add(new XElement("hkparam", new XAttribute("name", "motors" + (i + 1).ToString())));
+                    ragdollMotors.Add(new XElement("hkparam", new XAttribute("name", "motors" + (i + 1).ToString()), "null"));
                 }
                 motors.Remove();
 
