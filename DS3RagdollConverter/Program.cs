@@ -168,19 +168,22 @@ namespace DS3RagdollConverter
             XmlWriterSettings settings = new XmlWriterSettings();
             settings.Encoding = new ASCIIEncoding();
             settings.Indent = true;
-            using (var writer = XmlWriter.Create(baseDirectory + "temp/hkpPhysics.xml", settings))
+            using (var writer = XmlWriter.Create(baseDirectory + "temp\\hkpPhysics.xml", settings))
             {
                 hkpackfileHkpPhysics.Save(writer);
             }
 
             Process hkp2hknp = new Process();
-            hkp2hknp.StartInfo.FileName = baseDirectory + "Dependencies/hkp2hknp.exe";
-            string args = baseDirectory + "temp/hkpPhysics.xml " + baseDirectory + "temp/hknpPhysics.xml";
+            hkp2hknp.StartInfo.FileName = baseDirectory + "Dependencies\\hkp2hknp.exe";
+            string args = "\"" + baseDirectory + "temp\\hkpPhysics.xml\" " + "\"" + baseDirectory + "temp\\hknpPhysics.xml\"";
+            // Console.WriteLine(baseDirectory + "Dependencies/hkp2hknp.exe " + args);
             hkp2hknp.StartInfo.Arguments = args;
+            hkp2hknp.StartInfo.WorkingDirectory = baseDirectory + "Dependencies";
+            hkp2hknp.StartInfo.RedirectStandardOutput = true;
             hkp2hknp.Start();
             hkp2hknp.WaitForExit();
 
-            XElement hkpackfileHknpPhysics = XElement.Load(baseDirectory + "temp/hknpPhysics.xml");
+            XElement hkpackfileHknpPhysics = XElement.Load(baseDirectory + "temp\\hknpPhysics.xml");
 
             Directory.Delete(baseDirectory + "temp", true);
 
