@@ -21,8 +21,8 @@ namespace DS3RagdollConverter
             }
             else if (VerifyInput(args[0]))
             {
-                XElement hknpDataSection = GetHknpPhysics();
                 XElement hkaDataSection2014 = ConvertHka();
+                XElement hknpDataSection = GetHknpPhysics();
 
                 BuildObjDict(hknpDataSection, "hknp");
                 BuildObjDict(hkaDataSection2014, "hka");
@@ -62,6 +62,8 @@ namespace DS3RagdollConverter
         public static Dictionary<string, XElement> HknpObjDict { get; set; } = new();
 
         public static Dictionary<string, XElement> RenamedObjDict { get; set; } = new();
+
+        public static List<string> RagdollBoneList { get; set; } = new();
 
         private static int CurrentName { get; set; } = 90;
 
@@ -197,6 +199,13 @@ namespace DS3RagdollConverter
                 hknpCapsuleShape.Elements().First(hkparam => hkparam.Attribute("name").Value == "dispatchType").Value = "1";
             }
 
+            foreach (XElement hknpConvexPolytopeShape in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hknpConvexPolytopeShape"))
+            {
+                hknpConvexPolytopeShape.Attribute("signature").Value = "0x3ce9b3e3";
+                hknpConvexPolytopeShape.Elements().First(hkparam => hkparam.Attribute("name").Value == "flags").Value = "451";
+                hknpConvexPolytopeShape.Elements().First(hkparam => hkparam.Attribute("name").Value == "dispatchType").Value = "1";
+            }
+
             foreach (XElement hknpShapeMassProperties in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hknpShapeMassProperties"))
             {
                 hknpShapeMassProperties.Attribute("signature").Value = "0xe9191728";
@@ -224,6 +233,85 @@ namespace DS3RagdollConverter
             foreach (XElement hkpLimitedHingeConstraintData in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hkpLimitedHingeConstraintData"))
             {
                 hkpLimitedHingeConstraintData.Attribute("signature").Value = "0x51ea603a";
+
+                XElement atoms = hkpLimitedHingeConstraintData.Elements().First(hkparam => hkparam.Attribute("name").Value == "atoms").Element("hkobject");
+                atoms.Add(new XAttribute("class", "hkpLimitedHingeConstraintDataAtoms"), new XAttribute("name", "atoms"), new XAttribute("signature", "0x28231532"));
+
+                XElement transforms = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "transforms").Element("hkobject");
+                transforms.Add(new XAttribute("class", "hkpSetLocalTransformsConstraintAtom"), new XAttribute("name", "transforms"), new XAttribute("signature", "0x13cd1821"));
+
+                XElement setupStabilization = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "setupStabilization").Element("hkobject");
+                setupStabilization.Add(new XAttribute("class", "hkpSetupStabilizationAtom"), new XAttribute("name", "setupStabilization"), new XAttribute("signature", "0x870ee10a"));
+                setupStabilization.Elements().First(hkparam => hkparam.Attribute("name").Value == "enabled").Value = "true";
+
+                XElement angMotor = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "angMotor").Element("hkobject");
+                angMotor.Add(new XAttribute("class", "hkpAngMotorConstraintAtom"), new XAttribute("name", "angMotor"), new XAttribute("signature", "0x42498456"));
+
+                XElement angFriction = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "angFriction").Element("hkobject");
+                angFriction.Add(new XAttribute("class", "hkpAngFrictionConstraintAtom"), new XAttribute("name", "angFriction"), new XAttribute("signature", "0x89f70523"));
+
+                XElement angLimit = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "angLimit").Element("hkobject");
+                angLimit.Add(new XAttribute("class", "hkpAngLimitConstraintAtom"), new XAttribute("name", "angLimit"), new XAttribute("signature", "0x1c5a0dd"));
+
+                XElement Ang2d = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "2dAng").Element("hkobject");
+                Ang2d.Add(new XAttribute("class", "hkp2dAngConstraintAtom"), new XAttribute("name", "2dAng"), new XAttribute("signature", "0xd277c114"));
+
+                XElement ballSocket = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "ballSocket").Element("hkobject");
+                ballSocket.Add(new XAttribute("class", "hkpBallSocketConstraintAtom"), new XAttribute("name", "ballSocket"), new XAttribute("signature", "0x6ba88f7a"));
+                ballSocket.Elements().First(hkparam => hkparam.Attribute("name").Value == "solvingMethod").Value = "0";
+                XElement velocityStabilizationFactor = ballSocket.Elements().First(hkparam => hkparam.Attribute("name").Value == "velocityStabilizationFactor").Element("hkobject");
+                velocityStabilizationFactor.Add(new XAttribute("class", "hkUFloat8"), new XAttribute("name", "velocityStabilizationFactor"), new XAttribute("signature", "0x7c076f9a"));
+            }
+
+            foreach (XElement hkpRagdollConstraintData in hknpPhysicsData.Elements().Where(hkobj => hkobj.Attribute("class").Value == "hkpRagdollConstraintData"))
+            {
+                hkpRagdollConstraintData.Attribute("signature").Value = "0xb77d2036";
+
+                XElement atoms = hkpRagdollConstraintData.Elements().First(hkparam => hkparam.Attribute("name").Value == "atoms").Element("hkobject");
+                atoms.Add(new XAttribute("class", "hkpRagdollConstraintDataAtoms"), new XAttribute("name", "atoms"), new XAttribute("signature", "0xe11fb3ac"));
+
+                XElement transforms = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "transforms").Element("hkobject");
+                transforms.Add(new XAttribute("class", "hkpSetLocalTransformsConstraintAtom"), new XAttribute("name", "transforms"), new XAttribute("signature", "0x13cd1821"));
+
+                XElement setupStabilization = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "setupStabilization").Element("hkobject");
+                setupStabilization.Add(new XAttribute("class", "hkpSetupStabilizationAtom"), new XAttribute("name", "setupStabilization"), new XAttribute("signature", "0x870ee10a"));
+                setupStabilization.Elements().First(hkparam => hkparam.Attribute("name").Value == "enabled").Value = "true";
+
+                XElement ragdollMotors = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "ragdollMotors").Element("hkobject");
+                ragdollMotors.Add(new XAttribute("class", "hkpRagdollMotorConstraintAtom"), new XAttribute("name", "ragdollMotors"), new XAttribute("signature", "0x9d94d42c"));
+                XElement motors = ragdollMotors.Elements().First(hkparam => hkparam.Attribute("name").Value == "motors");
+                string[] motorRefArray = motors.Value.Split();
+                for (int i = 0; i < motorRefArray.Length; i++)
+                {
+                    ragdollMotors.Add(new XElement("hkparam", new XAttribute("name", "motors" + (i + 1).ToString())));
+                }
+                motors.Remove();
+
+                XElement angFriction = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "angFriction").Element("hkobject");
+                angFriction.Add(new XAttribute("class", "hkpAngFrictionConstraintAtom"), new XAttribute("name", "angFriction"), new XAttribute("signature", "0x89f70523"));
+
+                XElement twistLimit = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "twistLimit").Element("hkobject");
+                twistLimit.Add(new XAttribute("class", "hkpTwistLimitConstraintAtom"), new XAttribute("name", "twistLimit"), new XAttribute("signature", "0xda910271"));
+
+                XElement coneLimit = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "coneLimit").Element("hkobject");
+                coneLimit.Add(new XAttribute("class", "hkpConeLimitConstraintAtom"), new XAttribute("name", "coneLimit"), new XAttribute("signature", "0x159ea5c9"));
+
+                XElement planesLimit = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "planesLimit").Element("hkobject");
+                if (planesLimit.Elements().First(hkparam => hkparam.Attribute("name").Value == "type").Value == "TYPE_CONE_LIMIT")
+                {
+                    planesLimit.Add(new XAttribute("class", "hkpConeLimitConstraintAtom"), new XAttribute("name", "planesLimit"), new XAttribute("signature", "0x159ea5c9"));
+                }
+                else
+                {
+                    Console.WriteLine($"plane limit at {hkpRagdollConstraintData.Attribute("name").Value} is not of type coneLimit");
+                    Console.ReadLine();
+                }
+
+                XElement ballSocket = atoms.Elements().First(hkparam => hkparam.Attribute("name").Value == "ballSocket").Element("hkobject");
+                ballSocket.Add(new XAttribute("class", "hkpBallSocketConstraintAtom"), new XAttribute("name", "ballSocket"), new XAttribute("signature", "0x6ba88f7a"));
+                ballSocket.Elements().First(hkparam => hkparam.Attribute("name").Value == "solvingMethod").Value = "0";
+                XElement velocityStabilizationFactor = ballSocket.Elements().First(hkparam => hkparam.Attribute("name").Value == "velocityStabilizationFactor").Element("hkobject");
+                velocityStabilizationFactor.Add(new XAttribute("class", "hkUFloat8"), new XAttribute("name", "velocityStabilizationFactor"), new XAttribute("signature", "0x7c076f9a"));
             }
 
             return hknpPhysicsData;
@@ -258,6 +346,17 @@ namespace DS3RagdollConverter
             {
                 hkaSkeleton.Attribute("signature").Value = "0xfec1cedb";
                 hkaSkeleton.Add(new XElement("hkparam", new XAttribute("name", "partitions"), new XAttribute("numelements", "0")));
+
+                // saves list of bone names for boneToBodyMap
+                if (hkaSkeleton.Elements().First(hkparam => hkparam.Attribute("name").Value == "name").Value.StartsWith("Ragdoll"))
+                {
+                    foreach (XElement bone in hkaSkeleton.Elements().First(hkparam => hkparam.Attribute("name").Value == "bones").Elements())
+                    {
+                        string name = bone.Element("hkparam").Value;
+                        RagdollBoneList.Add(name);
+                    }
+                }
+
                 outputDataSection.Add(hkaSkeleton);
             }
 
@@ -398,7 +497,7 @@ namespace DS3RagdollConverter
         {
             XElement hknpRagdollData = hknpPhysicsData.Elements().First(hkobj => hkobj.Attribute("class").Value == "hknpPhysicsSystemData");
 
-            hknpRagdollData.Attribute("signature").Value = "0x7b054ea9";
+            hknpRagdollData.Attribute("signature").Value = "0xdc8f20ab";
             hknpRagdollData.Attribute("class").Value = "hknpRagdollData";
 
             // materials
@@ -415,6 +514,9 @@ namespace DS3RagdollConverter
                 triggerManifoldTolerance.Attribute("name").Value = "triggerManifoldTolerance";
                 triggerManifoldTolerance.Element("hkobject").Add(new XAttribute("class", "hkUFloat8"), new XAttribute("name", "triggerManifoldTolerance"));
 
+                XElement softContactSeperationVelocity = material.Elements().First(hkparam => hkparam.Attribute("name").Value == "softContactSeperationVelocity");
+                softContactSeperationVelocity.Element("hkobject").Add(new XAttribute("class", "hkUFloat8"), new XAttribute("name", "softContactSeperationVelocity"), new XAttribute("signature", "0x7c076f9a"));
+
                 material.Add(new XElement("hkparam", new XAttribute("name", "userData"), 0));
             }
 
@@ -428,9 +530,13 @@ namespace DS3RagdollConverter
             }
 
             // bodyCinfos
-            foreach (XElement bodyCinfo in hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "bodyCinfos").Elements())
+            Dictionary<string, string> RigidBodyIndices = new();
+            XElement[] bodyCinfoArray = hknpRagdollData.Elements().First(hkparam => hkparam.Attribute("name").Value == "bodyCinfos").Elements().ToArray();
+            for (int i = 0; i < bodyCinfoArray.Length; i++)
             {
-                bodyCinfo.Add(new XElement("hkparam", new XAttribute("name", "userData"), 0));
+                bodyCinfoArray[i].Add(new XElement("hkparam", new XAttribute("name", "userData"), 0));
+                string name = bodyCinfoArray[i].Elements().First(hkparam => hkparam.Attribute("name").Value == "name").Value;
+                RigidBodyIndices.Add(name, i.ToString());
             }
 
             // constraintCinfos
@@ -443,12 +549,11 @@ namespace DS3RagdollConverter
             hknpRagdollData.Add(new XElement("hkparam", new XAttribute("name", "skeleton"), "#93"));
 
             string boneToBodyMap = "";
-            int numBones = int.Parse(hknpRagdollData.Element("hkparam").Attribute("numelements").Value);
-            for (int i = 0; i < numBones; i++)
+            foreach (string boneName in RagdollBoneList)
             {
-                boneToBodyMap += i + " ";
+                boneToBodyMap += RigidBodyIndices[boneName] + " ";
             }
-            hknpRagdollData.Add(new XElement("hkparam", new XAttribute("name", "boneToBodyMap"), new XAttribute("numelements", numBones.ToString()), boneToBodyMap));
+            hknpRagdollData.Add(new XElement("hkparam", new XAttribute("name", "boneToBodyMap"), new XAttribute("numelements", RagdollBoneList.Count().ToString()), boneToBodyMap));
         }
     }
 }
