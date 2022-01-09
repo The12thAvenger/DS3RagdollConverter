@@ -180,7 +180,7 @@ namespace DS3RagdollConverter
             hkp2hknp.Start();
             hkp2hknp.WaitForExit();
 
-            XElement hkpackfileHknpPhysics = XElement.Load("temp/hknpPhysics.xml");
+            XElement hkpackfileHknpPhysics = XElement.Load(baseDirectory + "temp/hknpPhysics.xml");
 
             Directory.Delete(baseDirectory + "temp", true);
 
