@@ -1,5 +1,5 @@
 # DS3RagdollConverter
-Tool for converting Havok 2010 ragdoll XML files to Havok 2014 format for use with Dark Souls 3.  
+Tool for converting Havok 2010 ragdoll XML files to Havok 2014 format for use with Dark Souls 3. Can be used to create your own ragdolls, also supports porting Dark Souls 1 ragdolls to Dark Souls 3.
 
 ## Instructions
 * Create a ragdoll file using the 2010 32-bit havok content tools plugin for 3ds Max. See the included manual for instructions on how to do that (you will find it under Havok Content Tools -> Help -> Content Tools Help). 
